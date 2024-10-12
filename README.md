@@ -24,13 +24,13 @@ go get github.com/waltervargas/aws-cloudtrail-events
 
 ```go
 import (
-    "github.com/waltervargas/aws-cloudtrail-events"
+    "github.com/waltervargas/aws-cloudtrail-events/runinstances"
     "encoding/json"
     "log"
 )
 
 func main() {
-    var event awscloudtrailevents.RunInstancesEvent
+    var event runinstances.Event
     data := `{"eventVersion":"1.08","userIdentity":{...}}` // Example JSON data
 
     err := json.Unmarshal([]byte(data), &event)
