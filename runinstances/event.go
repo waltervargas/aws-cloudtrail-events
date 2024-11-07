@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// Records represent the CloudTrail records
 type Records struct {
 	Records []Event `json:"Records"`
 }
@@ -148,11 +149,16 @@ type IamInstanceProfile struct {
 	Name string `json:"name"`
 }
 
+// TagSpecificationSetOrHidden represents either a set of tag specifications or
+// a hidden marker indicating that the tag specifications are hidden for
+// security reasons.
 type TagSpecificationSetOrHidden struct {
 	IsHidden bool
 	Tags     *TagSpecificationSet
 }
 
+// UnmarshalJSON custom unmarshals TagSpecificationSetOrHidden from JSON,
+// handling both hidden values and valid tag specifications.
 func (t *TagSpecificationSetOrHidden) UnmarshalJSON(data []byte) error {
 	var hidden string
 	if err := json.Unmarshal(data, &hidden); err == nil {
