@@ -279,3 +279,125 @@ func TestRunInstancesEvent(t *testing.T) {
 		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestTagSpecificationSetOrHidden_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name             string
+		jsonData         []byte
+		expectedIsHidden bool
+		expectedTags     *runinstances.TagSpecificationSet
+		expectError      bool
+	}{
+		{
+			name: "Valid TagSpecificationSet with multiple tags",
+			jsonData: []byte(`{
+				"items": [
+					{
+						"resourceType": "instance",
+						"tags": [
+							{
+								"key": "environment",
+								"value": "production"
+							},
+							{
+								"key": "project",
+								"value": "my-project"
+							}
+						]
+					}
+				]
+			}`),
+			expectedIsHidden: false,
+			expectedTags: &runinstances.TagSpecificationSet{
+				Items: []runinstances.TagSpecificationItem{
+					{
+						ResourceType: "instance",
+						Tags: []runinstances.Tag{
+							{Key: "environment", Value: "production"},
+							{Key: "project", Value: "my-project"},
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:             "Hidden TagSpecificationSet",
+			jsonData:         []byte(`"HIDDEN_DUE_TO_SECURITY_REASONS"`),
+			expectedIsHidden: true,
+			expectedTags:     nil,
+			expectError:      false,
+		},
+		{
+			name:             "Unexpected Hidden Value",
+			jsonData:         []byte(`"UNKNOWN_VALUE"`),
+			expectedIsHidden: false,
+			expectedTags:     nil,
+			expectError:      true,
+		},
+		{
+			name:             "Invalid JSON Type (number)",
+			jsonData:         []byte(`12345`),
+			expectedIsHidden: false,
+			expectedTags:     nil,
+			expectError:      true,
+		},
+		{
+			name:             "Invalid JSON Format",
+			jsonData:         []byte(`{"invalid": "json"`), // Missing closing brace
+			expectedIsHidden: false,
+			expectedTags:     nil,
+			expectError:      true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var tagSpec runinstances.TagSpecificationSetOrHidden
+			err := json.Unmarshal(tc.jsonData, &tagSpec)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error during unmarshalling: %v", err)
+				return
+			}
+			if tagSpec.IsHidden != tc.expectedIsHidden {
+				t.Errorf("IsHidden mismatch: expected %v, got %v", tc.expectedIsHidden, tagSpec.IsHidden)
+			}
+			if (tagSpec.Tags == nil) != (tc.expectedTags == nil) {
+				t.Errorf("Tags presence mismatch: expected %v, got %v", tc.expectedTags != nil, tagSpec.Tags != nil)
+			} else if tagSpec.Tags != nil && tc.expectedTags != nil {
+				if len(tagSpec.Tags.Items) != len(tc.expectedTags.Items) {
+					t.Errorf("Expected %d TagSpecificationItems, got %d", len(tc.expectedTags.Items), len(tagSpec.Tags.Items))
+				}
+				for i, expectedItem := range tc.expectedTags.Items {
+					if i >= len(tagSpec.Tags.Items) {
+						break
+					}
+					actualItem := tagSpec.Tags.Items[i]
+					if actualItem.ResourceType != expectedItem.ResourceType {
+						t.Errorf("ResourceType mismatch in item %d: expected %s, got %s", i, expectedItem.ResourceType, actualItem.ResourceType)
+					}
+					if len(actualItem.Tags) != len(expectedItem.Tags) {
+						t.Errorf("Expected %d tags in item %d, got %d", len(expectedItem.Tags), i, len(actualItem.Tags))
+					}
+					for j, expectedTag := range expectedItem.Tags {
+						if j >= len(actualItem.Tags) {
+							break
+						}
+						actualTag := actualItem.Tags[j]
+						if actualTag.Key != expectedTag.Key || actualTag.Value != expectedTag.Value {
+							t.Errorf("Tag mismatch in item %d, tag %d: expected %+v, got %+v", i, j, expectedTag, actualTag)
+						}
+					}
+				}
+			}
+		})
+	}
+}

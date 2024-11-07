@@ -1,5 +1,14 @@
 package runinstances
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Records struct {
+	Records []Event `json:"Records"`
+}
+
 // Event represents the CloudTrail event for eventName=runInstances
 type Event struct {
 	EventVersion       string            `json:"eventVersion"`
@@ -58,20 +67,20 @@ type Attributes struct {
 
 // RequestParameters Struct
 type RequestParameters struct {
-	InstancesSet          InstancesSet          `json:"instancesSet"`
-	UserData              string                `json:"userData"`
-	InstanceType          string                `json:"instanceType"`
-	BlockDeviceMapping    BlockDeviceMapping    `json:"blockDeviceMapping"`
-	AvailabilityZone      string                `json:"availabilityZone"`
-	Tenancy               string                `json:"tenancy"`
-	Monitoring            Monitoring            `json:"monitoring"`
-	DisableAPITermination bool                  `json:"disableApiTermination"`
-	DisableAPIStop        bool                  `json:"disableApiStop"`
-	ClientToken           string                `json:"clientToken"`
-	NetworkInterfaceSet   NetworkInterfaceSet   `json:"networkInterfaceSet"`
-	IamInstanceProfile    IamInstanceProfile    `json:"iamInstanceProfile"`
-	TagSpecificationSet   TagSpecificationSet   `json:"tagSpecificationSet"`
-	InstanceMarketOptions InstanceMarketOptions `json:"instanceMarketOptions"`
+	InstancesSet          InstancesSet                `json:"instancesSet"`
+	UserData              string                      `json:"userData"`
+	InstanceType          string                      `json:"instanceType"`
+	BlockDeviceMapping    BlockDeviceMapping          `json:"blockDeviceMapping"`
+	AvailabilityZone      string                      `json:"availabilityZone"`
+	Tenancy               string                      `json:"tenancy"`
+	Monitoring            Monitoring                  `json:"monitoring"`
+	DisableAPITermination bool                        `json:"disableApiTermination"`
+	DisableAPIStop        bool                        `json:"disableApiStop"`
+	ClientToken           string                      `json:"clientToken"`
+	NetworkInterfaceSet   NetworkInterfaceSet         `json:"networkInterfaceSet"`
+	IamInstanceProfile    IamInstanceProfile          `json:"iamInstanceProfile"`
+	TagSpecificationSet   TagSpecificationSetOrHidden `json:"tagSpecificationSet"`
+	InstanceMarketOptions InstanceMarketOptions       `json:"instanceMarketOptions"`
 }
 
 // InstancesSet Struct
@@ -137,6 +146,32 @@ type GroupSetItem struct {
 // IamInstanceProfile Struct
 type IamInstanceProfile struct {
 	Name string `json:"name"`
+}
+
+type TagSpecificationSetOrHidden struct {
+	IsHidden bool
+	Tags     *TagSpecificationSet
+}
+
+func (t *TagSpecificationSetOrHidden) UnmarshalJSON(data []byte) error {
+	var hidden string
+	if err := json.Unmarshal(data, &hidden); err == nil {
+		if hidden == "HIDDEN_DUE_TO_SECURITY_REASONS" {
+			t.IsHidden = true
+			t.Tags = nil
+			return nil
+		}
+		return fmt.Errorf("unexpected hidden value: %s", hidden)
+	}
+
+	var tags TagSpecificationSet
+	if err := json.Unmarshal(data, &tags); err == nil {
+		t.IsHidden = false
+		t.Tags = &tags
+		return nil
+	}
+
+	return fmt.Errorf("tagSpecificationSet is neither hidden nor a valid TagSpecificationSet: %s", data)
 }
 
 // TagSpecificationSet Struct
