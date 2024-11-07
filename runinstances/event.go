@@ -1,5 +1,15 @@
 package runinstances
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// Records represent the CloudTrail records
+type Records struct {
+	Records []Event `json:"Records"`
+}
+
 // Event represents the CloudTrail event for eventName=runInstances
 type Event struct {
 	EventVersion       string            `json:"eventVersion"`
@@ -141,7 +151,49 @@ type IamInstanceProfile struct {
 
 // TagSpecificationSet Struct
 type TagSpecificationSet struct {
-	Items []TagSpecificationItem `json:"items"`
+	Items    []TagSpecificationItem `json:"items"`
+	isHidden bool                   // Internal flag to indicate hidden state
+}
+
+// tagSpecificationSetAlias is an alias to prevent recursion in UnmarshalJSON
+type tagSpecificationSetAlias TagSpecificationSet
+
+// UnmarshalJSON custom unmarshals TagSpecificationSet from JSON, handling both
+// hidden values and valid tag specifications.
+func (t *TagSpecificationSet) UnmarshalJSON(data []byte) error {
+	var hidden string
+	if err := json.Unmarshal(data, &hidden); err == nil {
+		if hidden == "HIDDEN_DUE_TO_SECURITY_REASONS" {
+			t.isHidden = true
+			t.Items = nil
+			return nil
+		}
+		return fmt.Errorf("unexpected hidden value: %s", hidden)
+	}
+
+	var tags tagSpecificationSetAlias
+	if err := json.Unmarshal(data, &tags); err == nil {
+		if tags.Items == nil || len(tags.Items) == 0 {
+			return fmt.Errorf("tagSpecificationSet is empty")
+		}
+		t.isHidden = false
+		t.Items = tags.Items
+		return nil
+	}
+	return fmt.Errorf("tagSpecificationSet is neither hidden nor a valid TagSpecificationSet: %s", data)
+}
+
+// IsHidden returns true if the TagSpecificationSet is hidden.
+func (t *TagSpecificationSet) IsHidden() bool {
+	return t.isHidden
+}
+
+// GetTags returns the tag items if not hidden; otherwise, it returns nil.
+func (t *TagSpecificationSet) GetTags() []TagSpecificationItem {
+	if t.isHidden {
+		return nil
+	}
+	return t.Items
 }
 
 // TagSpecificationItem Struct
