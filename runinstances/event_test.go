@@ -2,9 +2,11 @@ package runinstances_test
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/waltervargas/aws-cloudtrail-events/runinstances"
 )
 
@@ -275,47 +277,58 @@ func TestRunInstancesEvent(t *testing.T) {
 	}
 
 	// Compare the event and want using cmp.Diff
-	if diff := cmp.Diff(want, event); diff != "" {
+	if diff := cmp.Diff(want, event, cmpopts.IgnoreUnexported(runinstances.TagSpecificationSet{})); diff != "" {
 		t.Errorf("Mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestTagSpecificationSetOrHidden_UnmarshalJSON(t *testing.T) {
+func TestRecordsListRunInstancesFromFile(t *testing.T) {
+	file, err := os.Open("testdata/runinstances.json")
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
+	defer file.Close()
+	var records runinstances.Records
+	err = json.NewDecoder(file).Decode(&records)
+	if err != nil {
+		t.Fatalf("Failed to decode JSON: %v", err)
+	}
+}
+
+func TestTagSpecificationSet_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		name             string
 		jsonData         []byte
 		expectedIsHidden bool
-		expectedTags     *runinstances.TagSpecificationSet
+		expectedTags     []runinstances.TagSpecificationItem
 		expectError      bool
 	}{
 		{
 			name: "Valid TagSpecificationSet with multiple tags",
 			jsonData: []byte(`{
-				"items": [
-					{
-						"resourceType": "instance",
-						"tags": [
-							{
-								"key": "environment",
-								"value": "production"
-							},
-							{
-								"key": "project",
-								"value": "my-project"
-							}
-						]
-					}
-				]
-			}`),
+                "items": [
+                    {
+                        "resourceType": "instance",
+                        "tags": [
+                            {
+                                "key": "environment",
+                                "value": "production"
+                            },
+                            {
+                                "key": "project",
+                                "value": "my-project"
+                            }
+                        ]
+                    }
+                ]
+            }`),
 			expectedIsHidden: false,
-			expectedTags: &runinstances.TagSpecificationSet{
-				Items: []runinstances.TagSpecificationItem{
-					{
-						ResourceType: "instance",
-						Tags: []runinstances.Tag{
-							{Key: "environment", Value: "production"},
-							{Key: "project", Value: "my-project"},
-						},
+			expectedTags: []runinstances.TagSpecificationItem{
+				{
+					ResourceType: "instance",
+					Tags: []runinstances.Tag{
+						{Key: "environment", Value: "production"},
+						{Key: "project", Value: "my-project"},
 					},
 				},
 			},
@@ -354,7 +367,7 @@ func TestTagSpecificationSetOrHidden_UnmarshalJSON(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			var tagSpec runinstances.TagSpecificationSetOrHidden
+			var tagSpec runinstances.TagSpecificationSet
 			err := json.Unmarshal(tc.jsonData, &tagSpec)
 
 			if tc.expectError {
@@ -367,20 +380,20 @@ func TestTagSpecificationSetOrHidden_UnmarshalJSON(t *testing.T) {
 				t.Errorf("Unexpected error during unmarshalling: %v", err)
 				return
 			}
-			if tagSpec.IsHidden != tc.expectedIsHidden {
-				t.Errorf("IsHidden mismatch: expected %v, got %v", tc.expectedIsHidden, tagSpec.IsHidden)
+			if tagSpec.IsHidden() != tc.expectedIsHidden {
+				t.Errorf("IsHidden mismatch: expected %v, got %v", tc.expectedIsHidden, tagSpec.IsHidden())
 			}
-			if (tagSpec.Tags == nil) != (tc.expectedTags == nil) {
-				t.Errorf("Tags presence mismatch: expected %v, got %v", tc.expectedTags != nil, tagSpec.Tags != nil)
-			} else if tagSpec.Tags != nil && tc.expectedTags != nil {
-				if len(tagSpec.Tags.Items) != len(tc.expectedTags.Items) {
-					t.Errorf("Expected %d TagSpecificationItems, got %d", len(tc.expectedTags.Items), len(tagSpec.Tags.Items))
+			if (tagSpec.GetTags() == nil) != (tc.expectedTags == nil) {
+				t.Errorf("Tags presence mismatch: expected %v, got %v", tc.expectedTags != nil, tagSpec.GetTags() != nil)
+			} else if tagSpec.GetTags() != nil && tc.expectedTags != nil {
+				if len(tagSpec.GetTags()) != len(tc.expectedTags) {
+					t.Errorf("Expected %d TagSpecificationItems, got %d", len(tc.expectedTags), len(tagSpec.GetTags()))
 				}
-				for i, expectedItem := range tc.expectedTags.Items {
-					if i >= len(tagSpec.Tags.Items) {
+				for i, expectedItem := range tc.expectedTags {
+					if i >= len(tagSpec.GetTags()) {
 						break
 					}
-					actualItem := tagSpec.Tags.Items[i]
+					actualItem := tagSpec.GetTags()[i]
 					if actualItem.ResourceType != expectedItem.ResourceType {
 						t.Errorf("ResourceType mismatch in item %d: expected %s, got %s", i, expectedItem.ResourceType, actualItem.ResourceType)
 					}

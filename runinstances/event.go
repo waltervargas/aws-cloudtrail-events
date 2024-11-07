@@ -68,20 +68,20 @@ type Attributes struct {
 
 // RequestParameters Struct
 type RequestParameters struct {
-	InstancesSet          InstancesSet                `json:"instancesSet"`
-	UserData              string                      `json:"userData"`
-	InstanceType          string                      `json:"instanceType"`
-	BlockDeviceMapping    BlockDeviceMapping          `json:"blockDeviceMapping"`
-	AvailabilityZone      string                      `json:"availabilityZone"`
-	Tenancy               string                      `json:"tenancy"`
-	Monitoring            Monitoring                  `json:"monitoring"`
-	DisableAPITermination bool                        `json:"disableApiTermination"`
-	DisableAPIStop        bool                        `json:"disableApiStop"`
-	ClientToken           string                      `json:"clientToken"`
-	NetworkInterfaceSet   NetworkInterfaceSet         `json:"networkInterfaceSet"`
-	IamInstanceProfile    IamInstanceProfile          `json:"iamInstanceProfile"`
-	TagSpecificationSet   TagSpecificationSetOrHidden `json:"tagSpecificationSet"`
-	InstanceMarketOptions InstanceMarketOptions       `json:"instanceMarketOptions"`
+	InstancesSet          InstancesSet          `json:"instancesSet"`
+	UserData              string                `json:"userData"`
+	InstanceType          string                `json:"instanceType"`
+	BlockDeviceMapping    BlockDeviceMapping    `json:"blockDeviceMapping"`
+	AvailabilityZone      string                `json:"availabilityZone"`
+	Tenancy               string                `json:"tenancy"`
+	Monitoring            Monitoring            `json:"monitoring"`
+	DisableAPITermination bool                  `json:"disableApiTermination"`
+	DisableAPIStop        bool                  `json:"disableApiStop"`
+	ClientToken           string                `json:"clientToken"`
+	NetworkInterfaceSet   NetworkInterfaceSet   `json:"networkInterfaceSet"`
+	IamInstanceProfile    IamInstanceProfile    `json:"iamInstanceProfile"`
+	TagSpecificationSet   TagSpecificationSet   `json:"tagSpecificationSet"`
+	InstanceMarketOptions InstanceMarketOptions `json:"instanceMarketOptions"`
 }
 
 // InstancesSet Struct
@@ -149,40 +149,51 @@ type IamInstanceProfile struct {
 	Name string `json:"name"`
 }
 
-// TagSpecificationSetOrHidden represents either a set of tag specifications or
-// a hidden marker indicating that the tag specifications are hidden for
-// security reasons.
-type TagSpecificationSetOrHidden struct {
-	IsHidden bool
-	Tags     *TagSpecificationSet
+// TagSpecificationSet Struct
+type TagSpecificationSet struct {
+	Items    []TagSpecificationItem `json:"items"`
+	isHidden bool                   // Internal flag to indicate hidden state
 }
 
-// UnmarshalJSON custom unmarshals TagSpecificationSetOrHidden from JSON,
-// handling both hidden values and valid tag specifications.
-func (t *TagSpecificationSetOrHidden) UnmarshalJSON(data []byte) error {
+// tagSpecificationSetAlias is an alias to prevent recursion in UnmarshalJSON
+type tagSpecificationSetAlias TagSpecificationSet
+
+// UnmarshalJSON custom unmarshals TagSpecificationSet from JSON, handling both
+// hidden values and valid tag specifications.
+func (t *TagSpecificationSet) UnmarshalJSON(data []byte) error {
 	var hidden string
 	if err := json.Unmarshal(data, &hidden); err == nil {
 		if hidden == "HIDDEN_DUE_TO_SECURITY_REASONS" {
-			t.IsHidden = true
-			t.Tags = nil
+			t.isHidden = true
+			t.Items = nil
 			return nil
 		}
 		return fmt.Errorf("unexpected hidden value: %s", hidden)
 	}
 
-	var tags TagSpecificationSet
+	var tags tagSpecificationSetAlias
 	if err := json.Unmarshal(data, &tags); err == nil {
-		t.IsHidden = false
-		t.Tags = &tags
+		if tags.Items == nil || len(tags.Items) == 0 {
+			return fmt.Errorf("tagSpecificationSet is empty")
+		}
+		t.isHidden = false
+		t.Items = tags.Items
 		return nil
 	}
-
 	return fmt.Errorf("tagSpecificationSet is neither hidden nor a valid TagSpecificationSet: %s", data)
 }
 
-// TagSpecificationSet Struct
-type TagSpecificationSet struct {
-	Items []TagSpecificationItem `json:"items"`
+// IsHidden returns true if the TagSpecificationSet is hidden.
+func (t *TagSpecificationSet) IsHidden() bool {
+	return t.isHidden
+}
+
+// GetTags returns the tag items if not hidden; otherwise, it returns nil.
+func (t *TagSpecificationSet) GetTags() []TagSpecificationItem {
+	if t.isHidden {
+		return nil
+	}
+	return t.Items
 }
 
 // TagSpecificationItem Struct
